@@ -1,0 +1,14 @@
+torch>=2.2
+torchvision>=0.17
+torchaudio>=2.2
+
+numpy>=1.26
+pyyaml>=6.0
+tqdm>=4.66
+
+tokenizers>=0.20
+datasets>=2.20
+sentencepiece>=0.2
+
+accelerate>=0.33
+safetensors>=0.4
