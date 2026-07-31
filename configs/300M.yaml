@@ -22,3 +22,4 @@ training:
   logging_dir: logs
   seed: 42
   use_mixed_precision: false
+  save_optimizer_state: false
