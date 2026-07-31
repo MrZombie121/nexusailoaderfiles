@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import torch
@@ -27,7 +28,10 @@ class Trainer:
             max_position_embeddings=int(model_cfg.get("max_position_embeddings", 2048)),
             dropout=float(model_cfg.get("dropout", 0.1))).to(self.device)
         self.optimizer = build_optimizer(self.model, config)
-        self.scheduler = build_scheduler(self.optimizer, config)
+        accumulation_steps = int(config["training"].get("gradient_accumulation_steps", 1))
+        scheduler_config = {**config, "training": {**config["training"],
+            "max_steps": max(1, math.ceil(int(config["training"].get("max_steps", 1000)) / accumulation_steps))}}
+        self.scheduler = build_scheduler(self.optimizer, scheduler_config)
         self.loss_fn = CrossEntropyLoss()
         self.checkpoint_dir = ensure_directory(self.config["training"].get("checkpoint_dir", "checkpoints"))
 
@@ -44,33 +48,41 @@ class Trainer:
         self.optimizer.zero_grad(set_to_none=True)
         accumulation_steps = int(self.config["training"].get("gradient_accumulation_steps", 1))
         max_steps = int(self.config["training"].get("max_steps", 1000))
+        batches_per_epoch = len(self.dataloader)
+        if batches_per_epoch == 0:
+            raise ValueError("DataLoader пуст: невозможно начать обучение")
 
+        step = 0
+        epoch = 0
         optimizer_step = 0
-        for step, (input_ids, targets) in enumerate(self.dataloader, start=1):
-            if step > max_steps:
-                break
+        while step < max_steps:
+            epoch += 1
+            for input_ids, targets in self.dataloader:
+                if step >= max_steps:
+                    break
+                step += 1
+                input_ids = input_ids.to(self.device)
+                targets = targets.to(self.device)
+                logits = self.model(input_ids)
+                loss = self.loss_fn(logits, targets) / accumulation_steps
+                loss.backward()
 
-            input_ids = input_ids.to(self.device)
-            targets = targets.to(self.device)
-            logits = self.model(input_ids)
-            loss = self.loss_fn(logits, targets) / accumulation_steps
-            loss.backward()
-
-            if step % accumulation_steps == 0:
-                self.optimizer.step()
-                self.scheduler.step()
-                self.optimizer.zero_grad()
-                optimizer_step += 1
-                print(
-                    f"step={step} loss={loss.item() * accumulation_steps:.4f} lr={self.scheduler.get_last_lr()[0]:.6f}"
-                )
-
-                if optimizer_step % 10 == 0:
-                    torch.save(
-                        {"model_state": self.model.state_dict()},
-                        self.checkpoint_dir / f"checkpoint_{optimizer_step}.pt",
+                if step % accumulation_steps == 0 or step == max_steps:
+                    self.optimizer.step()
+                    self.scheduler.step()
+                    self.optimizer.zero_grad(set_to_none=True)
+                    optimizer_step += 1
+                    print(
+                        f"epoch={epoch} step={step} loss={loss.item() * accumulation_steps:.4f} "
+                        f"lr={self.scheduler.get_last_lr()[0]:.6f}"
                     )
 
+                    if optimizer_step % 10 == 0:
+                        self._save_checkpoint(self.checkpoint_dir / f"checkpoint_{optimizer_step}.pt", epoch, step)
+
+        self._save_checkpoint(self.checkpoint_dir / "latest.pt", epoch, step)
+
+    def _save_checkpoint(self, path: Any, epoch: int, step: int) -> None:
         torch.save({"model_state": self.model.state_dict(), "optimizer_state": self.optimizer.state_dict(),
                     "scheduler_state": self.scheduler.state_dict(), "config": self.config,
-                    "vocab_size": self.tokenizer.vocab_size}, self.checkpoint_dir / "latest.pt")
+                    "vocab_size": self.tokenizer.vocab_size, "epoch": epoch, "step": step}, path)
