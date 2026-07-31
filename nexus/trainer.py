@@ -33,6 +33,7 @@ class Trainer:
             "max_steps": max(1, math.ceil(int(config["training"].get("max_steps", 1000)) / accumulation_steps))}}
         self.scheduler = build_scheduler(self.optimizer, scheduler_config)
         self.loss_fn = CrossEntropyLoss()
+        self.save_optimizer_state = bool(self.config["training"].get("save_optimizer_state", False))
         self.checkpoint_dir = ensure_directory(self.config["training"].get("checkpoint_dir", "checkpoints"))
 
     def load_checkpoint(self, path: str) -> None:
@@ -83,6 +84,17 @@ class Trainer:
         self._save_checkpoint(self.checkpoint_dir / "latest.pt", epoch, step)
 
     def _save_checkpoint(self, path: Any, epoch: int, step: int) -> None:
-        torch.save({"model_state": self.model.state_dict(), "optimizer_state": self.optimizer.state_dict(),
-                    "scheduler_state": self.scheduler.state_dict(), "config": self.config,
-                    "vocab_size": self.tokenizer.vocab_size, "epoch": epoch, "step": step}, path)
+        # FP16 model-only checkpoints are much smaller than FP32 weights plus
+        # AdamW's two extra parameter buffers. Loading into the model still
+        # casts the tensors back to the model dtype.
+        model_state = {
+            key: value.detach().cpu().half() if torch.is_floating_point(value) else value.detach().cpu()
+            for key, value in self.model.state_dict().items()
+        }
+        payload = {"model_state": model_state, "config": self.config,
+                   "vocab_size": self.tokenizer.vocab_size, "epoch": epoch, "step": step,
+                   "checkpoint_format": "model_fp16"}
+        if self.save_optimizer_state:
+            payload["optimizer_state"] = self.optimizer.state_dict()
+            payload["scheduler_state"] = self.scheduler.state_dict()
+        torch.save(payload, path)
