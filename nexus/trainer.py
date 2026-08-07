@@ -12,6 +12,13 @@ try:
 except ImportError:
     HAS_XLA = False
 
+# Импорт для смешанной точности (AMP)
+try:
+    from torch.cuda.amp import autocast, GradScaler
+    HAS_AMP = True
+except ImportError:
+    HAS_AMP = False
+
 from .loss import CrossEntropyLoss
 from .model import NexusModel
 from .optimizer import build_optimizer
@@ -20,20 +27,18 @@ from .tokenizer import SimpleTokenizer
 from .utils import ensure_directory
 
 class Trainer:
-    """Training loop for NexusAI with support for GPU and TPU."""
+    """Training loop for NexusAI with support for GPU (AMP) and TPU."""
 
     def __init__(self, config: dict[str, Any], dataloader: torch.utils.data.DataLoader, tokenizer: SimpleTokenizer) -> None:
         self.config = config
         self.dataloader = dataloader
         self.tokenizer = tokenizer
         
-        # Определение устройства
         if HAS_XLA:
             self.device = xm.xla_device()
-            print(f"Trainer initialized on XLA device: {self.device}")
         else:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            print(f"Trainer initialized on device: {self.device}")
+            self.scaler = GradScaler() if HAS_AMP and self.device.type == 'cuda' else None
 
         model_cfg = config["model"]
         self.model = NexusModel(
@@ -51,10 +56,7 @@ class Trainer:
         
         scheduler_config = {
             **config,
-            "training": {
-                **config["training"],
-                "max_steps": max(1, math.ceil(int(config["training"].get("max_steps", 1000)) / accumulation_steps))
-            }
+            "training": {**config["training"], "max_steps": max(1, math.ceil(int(config["training"].get("max_steps", 1000)) / accumulation_steps))}
         }
         self.scheduler = build_scheduler(self.optimizer, scheduler_config)
         self.loss_fn = CrossEntropyLoss()
@@ -68,41 +70,43 @@ class Trainer:
         max_steps = int(self.config["training"].get("max_steps", 1000))
 
         if len(self.dataloader) == 0:
-            raise ValueError("DataLoader пуст: невозможно начать обучение")
+            raise ValueError("DataLoader пуст")
 
         step = 0
         epoch = 0
         optimizer_step = 0
         
         for input_ids, targets in cycle(self.dataloader):
-            if step >= max_steps:
-                break
-                
+            if step >= max_steps: break
             step += 1
-            if step % len(self.dataloader) == 1:
-                epoch += 1
+            if step % len(self.dataloader) == 1: epoch += 1
 
-            input_ids = input_ids.to(self.device)
-            targets = targets.to(self.device)
+            input_ids, targets = input_ids.to(self.device), targets.to(self.device)
             
-            logits = self.model(input_ids)
-            loss = self.loss_fn(logits, targets) / accumulation_steps
-            loss.backward()
+            # Обучение с использованием AMP (Mixed Precision) для экономии памяти
+            if self.scaler:
+                with autocast():
+                    logits = self.model(input_ids)
+                    loss = self.loss_fn(logits, targets) / accumulation_steps
+                self.scaler.scale(loss).backward()
+            else:
+                logits = self.model(input_ids)
+                loss = self.loss_fn(logits, targets) / accumulation_steps
+                loss.backward()
 
-                if step % accumulation_steps == 0 or step == max_steps:
-                # Оптимизация с учетом устройства
+            if step % accumulation_steps == 0 or step == max_steps:
                 if HAS_XLA:
                     xm.optimizer_step(self.optimizer)
+                    xm.mark_step()
+                elif self.scaler:
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
                 else:
                     self.optimizer.step()
                 
                 self.scheduler.step()
                 self.optimizer.zero_grad(set_to_none=True)
                 optimizer_step += 1
-                
-                # Синхронизация TPU
-                if HAS_XLA:
-                    xm.mark_step()
                 
                 if optimizer_step % 10 == 0:
                     print(f"step={step}/{max_steps} loss={loss.item() * accumulation_steps:.4f} lr={self.scheduler.get_last_lr()[0]:.6f}")
@@ -111,19 +115,8 @@ class Trainer:
         self._save_checkpoint(self.checkpoint_dir / "latest.pt", epoch, step)
 
     def _save_checkpoint(self, path: Any, epoch: int, step: int) -> None:
-        # Для TPU корректное сохранение требует принудительного переноса на CPU
-        model_state = {
-            key: value.detach().cpu().half() if torch.is_floating_point(value) else value.detach().cpu()
-            for key, value in self.model.state_dict().items()
-        }
-        payload = {
-            "model_state": model_state, 
-            "config": self.config,
-            "vocab_size": self.tokenizer.vocab_size, 
-            "epoch": epoch, 
-            "step": step,
-            "checkpoint_format": "model_fp16"
-        }
+        model_state = {k: v.detach().cpu().half() if torch.is_floating_point(v) else v.detach().cpu() for k, v in self.model.state_dict().items()}
+        payload = {"model_state": model_state, "config": self.config, "vocab_size": self.tokenizer.vocab_size, "epoch": epoch, "step": step}
         if self.save_optimizer_state:
             payload["optimizer_state"] = self.optimizer.state_dict()
             payload["scheduler_state"] = self.scheduler.state_dict()
