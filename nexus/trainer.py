@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from typing import Any
+from itertools import cycle
 
 import torch
 
@@ -49,19 +50,25 @@ class Trainer:
         self.optimizer.zero_grad(set_to_none=True)
         accumulation_steps = int(self.config["training"].get("gradient_accumulation_steps", 1))
         max_steps = int(self.config["training"].get("max_steps", 1000))
-        batches_per_epoch = len(self.dataloader)
-        if batches_per_epoch == 0:
+
+        if len(self.dataloader) == 0:
             raise ValueError("DataLoader пуст: невозможно начать обучение")
 
         step = 0
         epoch = 0
         optimizer_step = 0
-        while step < max_steps:
-            epoch += 1
-            for input_ids, targets in self.dataloader:
+
+        # Используем cycle для бесконечного перебора DataLoader,
+        # пока не достигнем max_steps
+        for input_ids, targets in cycle(self.dataloader):
                 if step >= max_steps:
                     break
+
                 step += 1
+            # Логика обновления эпохи (просто для логов)
+            if step % len(self.dataloader) == 1:
+                epoch += 1
+
                 input_ids = input_ids.to(self.device)
                 targets = targets.to(self.device)
                 logits = self.model(input_ids)
@@ -73,8 +80,9 @@ class Trainer:
                     self.scheduler.step()
                     self.optimizer.zero_grad(set_to_none=True)
                     optimizer_step += 1
+
                     print(
-                        f"epoch={epoch} step={step} loss={loss.item() * accumulation_steps:.4f} "
+                    f"epoch={epoch} step={step}/{max_steps} loss={loss.item() * accumulation_steps:.4f} "
                         f"lr={self.scheduler.get_last_lr()[0]:.6f}"
                     )
 
@@ -98,3 +106,4 @@ class Trainer:
             payload["optimizer_state"] = self.optimizer.state_dict()
             payload["scheduler_state"] = self.scheduler.state_dict()
         torch.save(payload, path)
+
