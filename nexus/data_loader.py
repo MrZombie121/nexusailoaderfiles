@@ -11,6 +11,17 @@ from .dataset import TextDataset
 from .tokenizer import SimpleTokenizer
 
 
+def get_data_loader(
+    data_dir: str | Path,
+    batch_size: int,
+    max_length: int = 128,
+) -> DataLoader:
+    """Helper to read data and build a DataLoader."""
+    tokenizer = SimpleTokenizer.load(Path(data_dir).parent / "tokenizer" / "vocab.json")
+    texts = read_texts([data_dir])
+    return build_dataloader(texts, tokenizer, batch_size=batch_size, max_length=max_length)
+
+
 def build_dataloader(
     texts: Iterable[str],
     tokenizer: SimpleTokenizer,
@@ -64,22 +75,6 @@ def _value_to_text(value: Any) -> str:
         return value.strip()
     if not isinstance(value, dict):
         return str(value).strip()
-from .dataset import TextDataset
-from .tokenizer import SimpleTokenizer
-
-
-def get_data_loader(
-    data_dir: str | Path,
-    batch_size: int,
-    max_length: int = 128,
-) -> DataLoader:
-    """Helper to read data and build a DataLoader."""
-    tokenizer = SimpleTokenizer.load(Path(data_dir).parent / "tokenizer" / "vocab.json")
-    texts = read_texts([data_dir])
-    return build_dataloader(texts, tokenizer, batch_size=batch_size, max_length=max_length)
-
-
-def build_dataloader(
     if isinstance(value.get("text"), str):
         return value["text"].strip()
     prompt = value.get("prompt", value.get("instruction", value.get("question", "")))
