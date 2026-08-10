@@ -48,7 +48,8 @@ class Trainer:
             num_layers=int(model_cfg["num_layers"]),
             num_heads=int(model_cfg["num_heads"]),
             max_position_embeddings=int(model_cfg.get("max_position_embeddings", 2048)),
-            dropout=float(model_cfg.get("dropout", 0.1))
+            dropout=float(model_cfg.get("dropout", 0.1)),
+            gradient_checkpointing=bool(config.get("training", {}).get("gradient_checkpointing", True))
         ).to(self.device)
         
         self.optimizer = build_optimizer(self.model, config)

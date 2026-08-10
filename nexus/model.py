@@ -19,8 +19,10 @@ class NexusModel(nn.Module):
         num_heads: int = 8,
         max_position_embeddings: int = 2048,
         dropout: float = 0.1,
+        gradient_checkpointing: bool = False,
     ) -> None:
         super().__init__()
+        self.gradient_checkpointing = gradient_checkpointing
         self.token_embedding = TokenEmbedding(vocab_size, hidden_size)
         self.position_embedding = PositionalEmbedding(max_position_embeddings, hidden_size)
         self.layers = nn.ModuleList(
@@ -33,8 +35,17 @@ class NexusModel(nn.Module):
         seq_length = input_ids.size(1)
         x = self.token_embedding(input_ids) + self.position_embedding(seq_length, input_ids.device)
 
+        if self.gradient_checkpointing and self.training:
+            if x.is_floating_point() and not x.requires_grad:
+                x.requires_grad_(True)
+
+        from torch.utils.checkpoint import checkpoint
+
         for layer in self.layers:
-            x = layer(x)
+            if self.gradient_checkpointing and self.training:
+                x = checkpoint(layer, x, use_reentrant=False)
+            else:
+                x = layer(x)
 
         x = self.layer_norm(x)
         return self.lm_head(x)

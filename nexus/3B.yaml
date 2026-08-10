@@ -1,0 +1,27 @@
+model:
+  vocab_size: 32000
+  hidden_size: 2560
+  intermediate_size: 10240
+  num_layers: 32
+  num_heads: 32
+  max_position_embeddings: 2048
+  dropout: 0.1
+  layer_norm_eps: 1e-5
+  bos_token_id: 1
+  eos_token_id: 2
+  pad_token_id: 0
+
+training:
+  batch_size: 4
+  gradient_accumulation_steps: 16
+  learning_rate: 2e-4
+  weight_decay: 0.01
+  max_steps: 30000
+  warmup_steps: 1000
+  checkpoint_dir: checkpoints
+  logging_dir: logs
+  seed: 42
+  use_mixed_precision: true
+  save_optimizer_state: false
+  checkpoint_every_epochs: 1
+  gradient_checkpointing: true
