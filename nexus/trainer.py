@@ -14,7 +14,7 @@ except ImportError:
 
 # Импорт для смешанной точности (AMP)
 try:
-    from torch.cuda.amp import autocast, GradScaler
+    from torch.amp import autocast, GradScaler
     HAS_AMP = True
 except ImportError:
     HAS_AMP = False
@@ -38,7 +38,7 @@ class Trainer:
             self.device = xm.xla_device()
         else:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            self.scaler = GradScaler() if HAS_AMP and self.device.type == 'cuda' else None
+            self.scaler = GradScaler("cuda") if HAS_AMP and self.device.type == 'cuda' else None
 
         model_cfg = config["model"]
         self.model = NexusModel(
@@ -86,7 +86,7 @@ class Trainer:
             
             # Обучение с использованием AMP (Mixed Precision) для экономии памяти
             if self.scaler:
-                with autocast():
+                with autocast("cuda"):
                     logits = self.model(input_ids)
                     loss = self.loss_fn(logits, targets) / accumulation_steps
                 self.scaler.scale(loss).backward()
