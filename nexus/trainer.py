@@ -69,6 +69,7 @@ class Trainer:
         self.optimizer.zero_grad(set_to_none=True)
         accumulation_steps = int(self.config["training"].get("gradient_accumulation_steps", 1))
         max_steps = int(self.config["training"].get("max_steps", 1000))
+        checkpoint_every_epochs = max(1, int(self.config["training"].get("checkpoint_every_epochs", 1)))
 
         if len(self.dataloader) == 0:
             raise ValueError("DataLoader пуст")
@@ -111,7 +112,9 @@ class Trainer:
                 
                 if optimizer_step % 10 == 0:
                     print(f"step={step}/{max_steps} loss={loss.item() * accumulation_steps:.4f} lr={self.scheduler.get_last_lr()[0]:.6f}")
-                    self._save_checkpoint(self.checkpoint_dir / f"checkpoint_{optimizer_step}.pt", epoch, step)
+                    
+            if step % len(self.dataloader) == 0 and epoch % checkpoint_every_epochs == 0:
+                self._save_checkpoint(self.checkpoint_dir / f"checkpoint_epoch_{epoch}.pt", epoch, step)
 
         self._save_checkpoint(self.checkpoint_dir / "latest.pt", epoch, step)
 
