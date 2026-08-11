@@ -1,0 +1,30 @@
+model:
+  vocab_size: 32000
+  hidden_size: 512
+  intermediate_size: 2048
+  num_layers: 8
+  num_heads: 8
+  num_key_value_heads: 2
+  max_position_embeddings: 4096
+  dropout: 0.0
+  layer_norm_eps: 1e-5
+  bos_token_id: 1
+  eos_token_id: 2
+  pad_token_id: 0
+
+training:
+  batch_size: 64 # Полетит с гигантской скоростью
+  gradient_accumulation_steps: 1
+  optimizer: "adafactor"
+  learning_rate: 5e-4
+  weight_decay: 0.01
+  max_steps: 10000
+  warmup_steps: 200
+  checkpoint_dir: checkpoints
+  logging_dir: logs
+  seed: 42
+  use_mixed_precision: true # bfloat16
+  precision_dtype: "bfloat16"
+  save_optimizer_state: false
+  checkpoint_every_epochs: 1
+  gradient_checkpointing: false # Памяти с головой хватает, чекпоинтинг только тормозит
