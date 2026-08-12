@@ -40,7 +40,11 @@ class Trainer:
             import os
             if use_mixed_precision:
                 os.environ["XLA_USE_BF16"] = "1" # Нативная поддержка bfloat16 для TPU
-            self.device = xm.xla_device()
+            try:
+                import torch_xla
+                self.device = torch_xla.device() # Новый синтаксис (без DeprecationWarning)
+            except AttributeError:
+                self.device = xm.xla_device() # Старый синтаксис для совместимости
             self.scaler = None
         else:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
