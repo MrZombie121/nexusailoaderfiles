@@ -55,7 +55,9 @@ class Trainer:
         # Загрузка модели сразу в bfloat16 для экономии RAM/VRAM
         dtype = torch.bfloat16 if use_mixed_precision and HAS_XLA else torch.float32
         
-        with torch.device("meta" if HAS_XLA else self.device): # init empty weights if possible
+        # Избегаем meta-устройства, так как оно требует .to_empty() и ручной инициализации
+        init_device = torch.device("cpu" if HAS_XLA else self.device)
+        with torch.device(init_device): # init on cpu first for TPU
             self.model = NexusModel(
                 vocab_size=tokenizer.vocab_size,
                 hidden_size=int(model_cfg["hidden_size"]),
