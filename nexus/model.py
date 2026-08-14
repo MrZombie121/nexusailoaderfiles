@@ -48,7 +48,7 @@ class NexusModel(nn.Module):
 
         for layer in self.layers:
             if self.gradient_checkpointing and self.training:
-                x = checkpoint(layer, x, use_reentrant=False)
+                x = checkpoint(layer, x, use_reentrant=False, preserve_rng_state=False)
             else:
                 x = layer(x)
 

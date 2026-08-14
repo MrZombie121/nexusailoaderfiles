@@ -7,7 +7,10 @@ from itertools import cycle
 
 # Попытка импорта XLA для TPU
 try:
+    import torch_xla
     import torch_xla.core.xla_model as xm
+    if not hasattr(torch, "xla"):
+        torch.xla = torch_xla
     HAS_XLA = True
 except ImportError:
     HAS_XLA = False
