@@ -18,14 +18,30 @@ class TransformerBlock(nn.Module):
         self.norm2 = nn.LayerNorm(hidden_size)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        past_key_value: tuple[torch.Tensor, torch.Tensor] | None = None,
+        use_cache: bool = False,
+        attn_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor | tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         residual = x
         x = self.norm1(x)
-        x = self.attention(x)
-        x = self.dropout(x) + residual
+        if use_cache:
+            attn_out, present_key_value = self.attention(
+                x, past_key_value=past_key_value, use_cache=True, attn_mask=attn_mask
+            )
+        else:
+            attn_out = self.attention(x, past_key_value=None, use_cache=False, attn_mask=attn_mask)
+            present_key_value = None
+
+        x = self.dropout(attn_out) + residual
 
         residual = x
         x = self.norm2(x)
         x = self.feedforward(x)
         x = self.dropout(x) + residual
+
+        if use_cache:
+            return x, present_key_value
         return x

@@ -1,0 +1,23 @@
+def generate_model_readme(run_name, config, final_loss, log_summary):
+    readme_content = f"""# NexusAI Model: {run_name}
+    
+## Параметры обучения
+- Конфигурация: {config.get('model', {})}
+- Max Steps: {config['training'].get('max_steps')}
+- Batch Size: {config['training'].get('batch_size')}
+- Final Loss: {final_loss:.4f}
+
+## Датасет
+- Дата: {time.strftime('%Y-%m-%d %H:%M:%S')}
+
+## Лог
+{log_summary}
+"""
+    return readme_content
+    with gr.Tab('Аналитика'):
+        eval_checkpoint = gr.Textbox(value=str(MODEL_ROOT / 'nexus_run_01' / 'model.pt'), label='Путь к модели')
+        val_path = gr.Textbox(value=str(DATA_DIR), label='Путь к валидационным данным')
+        ppl_button = gr.Button('Рассчитать Perplexity')
+        ppl_output = gr.Textbox(label='Результат')
+
+        ppl_button.click(calculate_perplexity, [eval_checkpoint, val_path], ppl_output)

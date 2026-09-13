@@ -36,62 +36,88 @@ class NexusModel(nn.Module):
         # Это экономит vocab_size * hidden_size параметров (например, ~131 МБ для 6B модели)
         self.lm_head.weight = self.token_embedding.embedding.weight
 
-    def forward(self, input_ids: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        past_key_values: list[tuple[torch.Tensor, torch.Tensor]] | None = None,
+        use_cache: bool = False,
+        position_ids: torch.Tensor | None = None,
+        start_pos: int = 0,
+        attn_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor | tuple[torch.Tensor, list[tuple[torch.Tensor, torch.Tensor]]]:
         seq_length = input_ids.size(1)
-        x = self.token_embedding(input_ids) + self.position_embedding(seq_length, input_ids.device)
+        device = input_ids.device
+
+        if past_key_values is not None and len(past_key_values) > 0 and past_key_values[0] is not None and start_pos == 0:
+            start_pos = past_key_values[0][0].shape[2]
+
+        x = self.token_embedding(input_ids) + self.position_embedding(
+            seq_length=seq_length,
+            start_pos=start_pos,
+            position_ids=position_ids,
+            device=device,
+        )
 
         if self.gradient_checkpointing and self.training:
             if x.is_floating_point() and not x.requires_grad:
                 x.requires_grad_(True)
 
+        present_key_values = [] if use_cache else None
+
         from torch.utils.checkpoint import checkpoint
 
-        for layer in self.layers:
-            if self.gradient_checkpointing and self.training:
+        for i, layer in enumerate(self.layers):
+            layer_past = past_key_values[i] if past_key_values is not None else None
+            if self.gradient_checkpointing and self.training and not use_cache:
                 x = checkpoint(layer, x, use_reentrant=False, preserve_rng_state=False)
             else:
-                x = layer(x)
+                if use_cache:
+                    x, layer_present = layer(x, past_key_value=layer_past, use_cache=True, attn_mask=attn_mask)
+                    present_key_values.append(layer_present)
+                else:
+                    x = layer(x, past_key_value=None, use_cache=False, attn_mask=attn_mask)
 
         x = self.layer_norm(x)
-        return self.lm_head(x)
+        logits = self.lm_head(x)
+
+        if use_cache:
+            return logits, present_key_values
+        return logits
 
     def generate(
         self,
         tokenizer: "SimpleTokenizer",
         prompt: str,
-        max_new_tokens: int = 32,
-        temperature: float = 1.0,
-        top_k: int | None = None,
+        max_new_tokens: int = 256,
+        temperature: float = 0.7,
+        top_k: int | None = 50,
+        top_p: float | None = 0.9,
+        min_p: float | None = 0.05,
+        repetition_penalty: float = 1.15,
+        no_repeat_ngram_size: int = 0,
+        do_sample: bool = True,
+        use_cache: bool = True,
+        stop_strings: list[str] | None = None,
+        return_full_text: bool = True,
     ) -> str:
-        from .tokenizer import SimpleTokenizer
+        from .generation import generate_text
 
-        if not isinstance(tokenizer, SimpleTokenizer):
-            raise ValueError("tokenizer must be an instance of SimpleTokenizer")
-
-        self.eval()
-        tokens = tokenizer.encode(prompt)
-        if not tokens:
-            tokens = [tokenizer.bos_token_id]
-
-        input_ids = torch.tensor(tokens, dtype=torch.long, device=next(self.parameters()).device).unsqueeze(0)
-        with torch.no_grad():
-            for _ in range(max_new_tokens):
-                logits = self(input_ids)
-                logits = logits[:, -1, :] / temperature
-
-                if top_k is not None and top_k > 0:
-                    top_values, _ = torch.topk(logits, top_k)
-                    min_value = top_values[:, -1].unsqueeze(-1)
-                    logits = torch.where(logits < min_value, torch.tensor(-float("Inf"), device=logits.device), logits)
-
-                probs = torch.softmax(logits, dim=-1)
-                next_token = torch.multinomial(probs, num_samples=1)
-                input_ids = torch.cat([input_ids, next_token], dim=1)
-
-                if next_token.item() == tokenizer.eos_token_id:
-                    break
-
-        return tokenizer.decode(input_ids[0].tolist())
+        return generate_text(
+            model=self,
+            tokenizer=tokenizer,
+            prompt=prompt,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+            top_k=top_k,
+            top_p=top_p,
+            min_p=min_p,
+            repetition_penalty=repetition_penalty,
+            no_repeat_ngram_size=no_repeat_ngram_size,
+            do_sample=do_sample,
+            use_cache=use_cache,
+            stop_strings=stop_strings,
+            return_full_text=return_full_text,
+        )
 
 
 NexusModel.__annotations__["SimpleTokenizer"] = "SimpleTokenizer"

@@ -8,13 +8,16 @@ class FeedForward(nn.Module):
 
     def __init__(self, hidden_size: int, intermediate_size: int, dropout: float = 0.1) -> None:
         super().__init__()
-        self.net = nn.Sequential(
+        layers = [
             nn.Linear(hidden_size, intermediate_size),
-            nn.GELU(),
-            nn.Dropout(dropout),
-            nn.Linear(intermediate_size, hidden_size),
-            nn.Dropout(dropout),
-        )
+            nn.GELU(approximate="tanh"),
+        ]
+        if dropout > 0.0:
+            layers.append(nn.Dropout(dropout))
+        layers.append(nn.Linear(intermediate_size, hidden_size))
+        if dropout > 0.0:
+            layers.append(nn.Dropout(dropout))
+        self.net = nn.Sequential(*layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.net(x)

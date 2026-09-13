@@ -28,10 +28,44 @@ def build_dataloader(
     batch_size: int,
     max_length: int = 128,
     shuffle: bool = True,
+    num_workers: int = 0,
+    pin_memory: bool | None = None,
 ) -> DataLoader:
-    """Build a PyTorch DataLoader for tokenized text sequences."""
+    """Build an optimized PyTorch DataLoader for tokenized text sequences."""
     dataset = TextDataset(texts, tokenizer, max_length=max_length)
-    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=_collate)
+    if pin_memory is None:
+        pin_memory = torch.cuda.is_available()
+    return DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        collate_fn=_collate,
+        pin_memory=pin_memory,
+        num_workers=num_workers,
+        persistent_workers=(num_workers > 0),
+    )
+
+
+def build_train_val_dataloaders(
+    texts: list[str],
+    tokenizer: SimpleTokenizer,
+    batch_size: int,
+    max_length: int = 128,
+    val_ratio: float = 0.05,
+    num_workers: int = 0,
+) -> tuple[DataLoader, DataLoader | None]:
+    """Splits texts into train and validation sets and builds DataLoaders for both."""
+    if val_ratio <= 0.0 or len(texts) < 20:
+        train_loader = build_dataloader(texts, tokenizer, batch_size, max_length, shuffle=True, num_workers=num_workers)
+        return train_loader, None
+
+    val_size = max(1, int(len(texts) * val_ratio))
+    train_texts = texts[:-val_size]
+    val_texts = texts[-val_size:]
+
+    train_loader = build_dataloader(train_texts, tokenizer, batch_size, max_length, shuffle=True, num_workers=num_workers)
+    val_loader = build_dataloader(val_texts, tokenizer, batch_size, max_length, shuffle=False, num_workers=num_workers)
+    return train_loader, val_loader
 
 
 def read_texts(paths: Iterable[str | Path]) -> Iterator[str]:

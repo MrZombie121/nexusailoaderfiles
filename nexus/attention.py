@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class MultiHeadAttention(nn.Module):
-    """Multi-head self-attention with Grouped Query Attention (GQA) support."""
+    """Multi-head self-attention with Grouped Query Attention (GQA) and KV-cache support."""
 
     def __init__(self, hidden_size: int, num_heads: int, num_key_value_heads: int | None = None, dropout: float = 0.1) -> None:
         super().__init__()
@@ -29,28 +29,50 @@ class MultiHeadAttention(nn.Module):
         
         self.dropout_p = dropout
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        past_key_value: tuple[torch.Tensor, torch.Tensor] | None = None,
+        use_cache: bool = False,
+        attn_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor | tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         batch_size, seq_len, _ = x.shape
         
         q = self.q_proj(x).view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
         k = self.k_proj(x).view(batch_size, seq_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         v = self.v_proj(x).view(batch_size, seq_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
+        if past_key_value is not None:
+            past_k, past_v = past_key_value
+            k = torch.cat([past_k, k], dim=2)
+            v = torch.cat([past_v, v], dim=2)
+
+        present_key_value = (k, v) if use_cache else None
+
         # Repeat K and V for GQA
         if self.num_key_value_groups > 1:
-            k = k[:, :, None, :, :].expand(batch_size, self.num_key_value_heads, self.num_key_value_groups, seq_len, self.head_dim)
-            k = k.reshape(batch_size, self.num_heads, seq_len, self.head_dim)
-            
-            v = v[:, :, None, :, :].expand(batch_size, self.num_key_value_heads, self.num_key_value_groups, seq_len, self.head_dim)
-            v = v.reshape(batch_size, self.num_heads, seq_len, self.head_dim)
+            k_att = k.repeat_interleave(self.num_key_value_groups, dim=1)
+            v_att = v.repeat_interleave(self.num_key_value_groups, dim=1)
+        else:
+            k_att = k
+            v_att = v
 
-        # Scaled Dot-Product Attention (FlashAttention compatible)
+        # When seq_len == 1 (generating with cache), the new query attends to all past keys
+        is_causal = (seq_len > 1) and (attn_mask is None)
+
+        # Scaled Dot-Product Attention (FlashAttention-2 / cuDNN compatible)
         context = F.scaled_dot_product_attention(
-            q, k, v,
-            attn_mask=None,
+            q.contiguous(),
+            k_att.contiguous(),
+            v_att.contiguous(),
+            attn_mask=attn_mask,
             dropout_p=self.dropout_p if self.training else 0.0,
-            is_causal=True
+            is_causal=is_causal,
         )
 
         context = context.transpose(1, 2).contiguous().view(batch_size, seq_len, self.hidden_size)
-        return self.o_proj(context)
+        out = self.o_proj(context)
+
+        if use_cache:
+            return out, present_key_value
+        return out

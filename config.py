@@ -16,8 +16,9 @@ class ModelConfig:
     intermediate_size: int = 2048
     num_layers: int = 8
     num_heads: int = 8
+    num_key_value_heads: int | None = None
     max_position_embeddings: int = 2048
-    dropout: float = 0.1
+    dropout: float = 0.0
     layer_norm_eps: float = 1e-5
     bos_token_id: int = 1
     eos_token_id: int = 2
@@ -26,29 +27,35 @@ class ModelConfig:
 
 @dataclass
 class TrainingConfig:
-    """Training parameters for the project."""
+    """Training parameters for high-performance training."""
 
     batch_size: int = 8
     gradient_accumulation_steps: int = 4
     learning_rate: float = 3e-4
     weight_decay: float = 0.01
     max_steps: int = 10000
-    warmup_steps: int = 100
+    warmup_steps: int = 300
     checkpoint_dir: str = "checkpoints"
     logging_dir: str = "logs"
     seed: int = 42
-    use_mixed_precision: bool = False
+    use_mixed_precision: bool = True
+    precision_dtype: str = "bfloat16"
+    save_optimizer_state: bool = False
+    checkpoint_every_epochs: int = 1
+    gradient_checkpointing: bool = False
+    compile: bool = True
+    max_seq_length: int = 256
 
 
 def build_default_config(model_size: str = "100M") -> dict[str, Any]:
     """Create a default config bucket for supported model sizes."""
 
     presets: dict[str, dict[str, Any]] = {
-        "100M": {"hidden_size": 512, "intermediate_size": 2048, "num_layers": 8, "num_heads": 8},
-        "300M": {"hidden_size": 768, "intermediate_size": 3072, "num_layers": 12, "num_heads": 12},
-        "1B": {"hidden_size": 1536, "intermediate_size": 6144, "num_layers": 24, "num_heads": 16},
-        "3B": {"hidden_size": 2560, "intermediate_size": 10240, "num_layers": 32, "num_heads": 32},
-        "6B": {"hidden_size": 4096, "intermediate_size": 16384, "num_layers": 32, "num_heads": 32},
+        "100M": {"hidden_size": 512, "intermediate_size": 2048, "num_layers": 8, "num_heads": 8, "num_key_value_heads": 2},
+        "300M": {"hidden_size": 768, "intermediate_size": 3072, "num_layers": 12, "num_heads": 12, "num_key_value_heads": 4},
+        "1B": {"hidden_size": 1536, "intermediate_size": 6144, "num_layers": 24, "num_heads": 16, "num_key_value_heads": 4},
+        "3B": {"hidden_size": 2560, "intermediate_size": 10240, "num_layers": 32, "num_heads": 32, "num_key_value_heads": 8},
+        "6B": {"hidden_size": 4096, "intermediate_size": 11008, "num_layers": 32, "num_heads": 32, "num_key_value_heads": 8},
     }
 
     if model_size not in presets:
