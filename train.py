@@ -4,6 +4,8 @@ import argparse
 import sys
 from pathlib import Path
 
+import torch
+
 from config import build_default_config, load_config, save_config
 from nexus.data_loader import build_train_val_dataloaders, read_texts
 from nexus.tokenizer import SimpleTokenizer
@@ -40,10 +42,12 @@ def main() -> None:
     # CLI parameter overrides
     if "training" not in config:
         config["training"] = {}
-    if args.epochs is not None:
-        config["training"]["epochs"] = args.epochs
     if args.max_steps is not None:
         config["training"]["max_steps"] = args.max_steps
+        config["training"].pop("epochs", None)
+    elif args.epochs is not None:
+        config["training"]["epochs"] = args.epochs
+        config["training"].pop("max_steps", None)
     if args.batch_size is not None:
         config["training"]["batch_size"] = args.batch_size
     if args.lr is not None:

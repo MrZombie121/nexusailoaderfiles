@@ -133,12 +133,16 @@ class Trainer:
 
         accumulation_steps = max(1, int(train_cfg.get("gradient_accumulation_steps", 1)))
         steps_per_epoch = max(1, len(self.raw_dataloader))
-        epochs = float(train_cfg.get("epochs", 0))
-        if epochs > 0:
+        if "max_steps" in train_cfg and train_cfg["max_steps"] is not None and int(train_cfg["max_steps"]) > 0:
+            total_steps = int(train_cfg["max_steps"])
+            config["training"]["epochs"] = total_steps / steps_per_epoch
+        elif "epochs" in train_cfg and train_cfg["epochs"] is not None and float(train_cfg["epochs"]) > 0:
+            epochs = float(train_cfg["epochs"])
             total_steps = max(1, math.ceil(epochs * steps_per_epoch))
             config["training"]["max_steps"] = total_steps
         else:
             total_steps = int(train_cfg.get("max_steps", 200))
+            config["training"]["epochs"] = total_steps / steps_per_epoch
 
         scheduler_config = {
             **config,
@@ -207,14 +211,18 @@ class Trainer:
         self.optimizer.zero_grad(set_to_none=True)
         accumulation_steps = max(1, int(self.config["training"].get("gradient_accumulation_steps", 1)))
         steps_per_epoch = max(1, len(self.raw_dataloader))
-        epochs_cfg = float(self.config["training"].get("epochs", 0))
-
-        if epochs_cfg > 0:
-            max_steps = max(1, math.ceil(epochs_cfg * steps_per_epoch))
+        train_cfg = self.config.get("training", {})
+        if "max_steps" in train_cfg and train_cfg["max_steps"] is not None and int(train_cfg["max_steps"]) > 0:
+            max_steps = int(train_cfg["max_steps"])
+            total_epochs_est = max_steps / steps_per_epoch
+        elif "epochs" in train_cfg and train_cfg["epochs"] is not None and float(train_cfg["epochs"]) > 0:
+            total_epochs_est = float(train_cfg["epochs"])
+            max_steps = max(1, math.ceil(total_epochs_est * steps_per_epoch))
         else:
-            max_steps = int(self.config["training"].get("max_steps", 200))
+            max_steps = int(train_cfg.get("max_steps", 200))
+            total_epochs_est = max_steps / steps_per_epoch
 
-        total_epochs = math.ceil(max_steps / steps_per_epoch) if epochs_cfg == 0 else int(math.ceil(epochs_cfg))
+        total_epochs = max(1, math.ceil(total_epochs_est))
         checkpoint_every_epochs = max(1, int(self.config["training"].get("checkpoint_every_epochs", 1)))
         log_interval = max(1, int(self.config["training"].get("log_interval", self.config["training"].get("log_every", 1))))
         eval_interval = int(self.config["training"].get("eval_interval", 0))
@@ -230,8 +238,9 @@ class Trainer:
         window_start_time = time.time()
         train_start_time = time.time()
 
+        epochs_display = f"{total_epochs_est:.3f} эпохи" if total_epochs_est < 1.0 else f"~{total_epochs} эпох"
         print(
-            f"=== СТАРТ ОБУЧЕНИЯ: {max_steps} батчей (~{total_epochs} эпох) | batch={self.config['training'].get('batch_size', 1)} | accum={accumulation_steps} ==="
+            f"=== СТАРТ ОБУЧЕНИЯ: {max_steps} батчей ({epochs_display}) | batch={self.config['training'].get('batch_size', 1)} | accum={accumulation_steps} ==="
         )
 
         try:
