@@ -78,6 +78,13 @@ class Trainer:
                 self.dataloader = self.raw_dataloader
         else:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            if self.device.type == "cuda":
+                torch.backends.cuda.matmul.allow_tf32 = True
+                torch.backends.cudnn.allow_tf32 = True
+                torch.backends.cudnn.benchmark = True
+                if hasattr(torch, "set_float32_matmul_precision"):
+                    torch.set_float32_matmul_precision("high")
+
             if self.device.type == "cuda" and use_mixed_precision and HAS_AMP:
                 if precision_dtype == "bfloat16" and torch.cuda.is_bf16_supported():
                     self.autocast_dtype = torch.bfloat16
@@ -90,7 +97,12 @@ class Trainer:
                 self.scaler = None
 
         model_cfg = config["model"]
-        dtype = torch.bfloat16 if (use_mixed_precision and HAS_XLA) else torch.float32
+        hidden_dim = int(model_cfg["hidden_size"])
+        # For 3B and 6B models, initialize directly in half/bfloat16 to avoid 12-24 GB FP32 VRAM spike
+        if self.device.type == "cuda" and use_mixed_precision and hidden_dim >= 2560:
+            dtype = self.autocast_dtype if self.autocast_dtype is not None else torch.float16
+        else:
+            dtype = torch.bfloat16 if (use_mixed_precision and HAS_XLA) else torch.float32
 
         init_device = torch.device("cpu" if HAS_XLA else self.device)
         with torch.device(init_device):

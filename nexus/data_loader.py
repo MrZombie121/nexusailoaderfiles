@@ -77,14 +77,25 @@ def build_synthetic_dataloaders(
     num_workers: int = 0,
     languages: list[str] | None = None,
 ) -> tuple[DataLoader, DataLoader]:
-    """Builds purely procedural synthetic DataLoaders generating billions of tokens on-the-fly (UKR + RUS + ENG)."""
+    """Builds high-performance procedural synthetic DataLoaders generating billions of tokens on-the-fly (UKR + RUS + ENG)."""
     from .synthetic import ProceduralDataset
     langs = languages or ["uk", "ru", "en"]
     train_ds = ProceduralDataset(tokenizer=tokenizer, total_samples=train_samples, max_length=max_length, seed=42, languages=langs)
     val_ds = ProceduralDataset(tokenizer=tokenizer, total_samples=val_samples, max_length=max_length, seed=9999, languages=langs)
     pin_memory = torch.cuda.is_available()
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, collate_fn=_collate, pin_memory=pin_memory, num_workers=num_workers)
-    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, collate_fn=_collate, pin_memory=pin_memory, num_workers=num_workers)
+
+    kwargs: dict[str, Any] = {
+        "batch_size": batch_size,
+        "collate_fn": _collate,
+        "pin_memory": pin_memory,
+        "num_workers": num_workers,
+    }
+    if num_workers > 0:
+        kwargs["persistent_workers"] = True
+        kwargs["prefetch_factor"] = 2
+
+    train_loader = DataLoader(train_ds, shuffle=False, **kwargs)
+    val_loader = DataLoader(val_ds, shuffle=False, **kwargs)
     return train_loader, val_loader
 
 

@@ -12,8 +12,8 @@ model:
   eos_token_id: 2
   pad_token_id: 0
 training:
-  batch_size: 1
-  gradient_accumulation_steps: 16
+  batch_size: 2
+  gradient_accumulation_steps: 8
   optimizer: adafactor
   learning_rate: 2e-4
   weight_decay: 0.01

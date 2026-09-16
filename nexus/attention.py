@@ -4,6 +4,18 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """Expands KV heads for Grouped Query Attention (GQA) without allocating new duplicate memory."""
+    if n_rep == 1:
+        return hidden_states
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    return (
+        hidden_states[:, :, None, :, :]
+        .expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+        .reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+    )
+
+
 class MultiHeadAttention(nn.Module):
     """Multi-head self-attention with Grouped Query Attention (GQA) and KV-cache support."""
 
@@ -49,10 +61,10 @@ class MultiHeadAttention(nn.Module):
 
         present_key_value = (k, v) if use_cache else None
 
-        # Repeat K and V for GQA
+        # Repeat K and V for GQA using zero-copy view expansion
         if self.num_key_value_groups > 1:
-            k_att = k.repeat_interleave(self.num_key_value_groups, dim=1)
-            v_att = v.repeat_interleave(self.num_key_value_groups, dim=1)
+            k_att = repeat_kv(k, self.num_key_value_groups)
+            v_att = repeat_kv(v, self.num_key_value_groups)
         else:
             k_att = k
             v_att = v
