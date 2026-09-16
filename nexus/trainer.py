@@ -108,18 +108,9 @@ class Trainer:
 
         self.model = self.model.to(dtype).to(self.device)
 
-        # torch.compile for CUDA acceleration
-        use_compile = bool(train_cfg.get("compile", True))
-        if use_compile and hasattr(torch, "compile") and self.device.type == "cuda":
-            try:
-                self.model = torch.compile(self.model)
-                print("Модель оптимизирована с помощью torch.compile (kernel fusion)")
-            except Exception as e:
-                print(f"torch.compile пропущен ({e}), используется standard eager mode")
-
         self.optimizer = build_optimizer(self.model, config)
 
-        # Multi-GPU support via DataParallel
+        # Multi-GPU support via DataParallel vs single-GPU torch.compile
         self.is_multi_gpu = False
         if self.device.type == "cuda" and torch.cuda.device_count() > 1:
             num_gpus = torch.cuda.device_count()
@@ -130,6 +121,14 @@ class Trainer:
             )
             self.model = torch.nn.DataParallel(self.model)
             self.is_multi_gpu = True
+        else:
+            use_compile = bool(train_cfg.get("compile", True))
+            if use_compile and hasattr(torch, "compile") and self.device.type == "cuda":
+                try:
+                    self.model = torch.compile(self.model)
+                    print("Модель оптимизирована с помощью torch.compile (kernel fusion)")
+                except Exception as e:
+                    print(f"torch.compile пропущен ({e}), используется standard eager mode")
 
         accumulation_steps = max(1, int(train_cfg.get("gradient_accumulation_steps", 1)))
         steps_per_epoch = max(1, len(self.raw_dataloader))
