@@ -1,5 +1,5 @@
 model:
-  vocab_size: 32000
+  vocab_size: 16000
   hidden_size: 512
   intermediate_size: 2048
   num_layers: 8
@@ -11,11 +11,10 @@ model:
   bos_token_id: 1
   eos_token_id: 2
   pad_token_id: 0
-
 training:
-  batch_size: 64 # Полетит с гигантской скоростью
+  batch_size: 64
   gradient_accumulation_steps: 1
-  optimizer: "adafactor"
+  optimizer: adafactor
   learning_rate: 5e-4
   weight_decay: 0.01
   max_steps: 300
@@ -23,8 +22,8 @@ training:
   checkpoint_dir: checkpoints
   logging_dir: logs
   seed: 42
-  use_mixed_precision: true # bfloat16
-  precision_dtype: "bfloat16"
+  use_mixed_precision: true
+  precision_dtype: bfloat16
   save_optimizer_state: false
   checkpoint_every_epochs: 1
-  gradient_checkpointing: false # Памяти с головой хватает, чекпоинтинг только тормозит
+  gradient_checkpointing: false

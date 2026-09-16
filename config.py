@@ -11,7 +11,7 @@ import yaml
 class ModelConfig:
     """Configuration for a decoder-only language model."""
 
-    vocab_size: int = 32000
+    vocab_size: int = 16000
     hidden_size: int = 512
     intermediate_size: int = 2048
     num_layers: int = 8

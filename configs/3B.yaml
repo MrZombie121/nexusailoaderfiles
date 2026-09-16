@@ -1,5 +1,5 @@
 model:
-  vocab_size: 32000
+  vocab_size: 16000
   hidden_size: 2560
   intermediate_size: 10240
   num_layers: 32
@@ -11,12 +11,11 @@ model:
   bos_token_id: 1
   eos_token_id: 2
   pad_token_id: 0
-
 training:
   batch_size: 4
   gradient_accumulation_steps: 8
-  optimizer: "adafactor"
-  learning_rate: 2.5e-4
+  optimizer: adafactor
+  learning_rate: 0.00025
   weight_decay: 0.01
   max_steps: 150
   warmup_steps: 10
@@ -24,7 +23,7 @@ training:
   logging_dir: logs
   seed: 42
   use_mixed_precision: true
-  precision_dtype: "bfloat16"
+  precision_dtype: bfloat16
   save_optimizer_state: false
   checkpoint_every_epochs: 1
   gradient_checkpointing: true

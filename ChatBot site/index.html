@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NexusAI — В Разработке</title>
+<style>
+    :root {
+        --bg-1: #0a0e27;
+        --bg-2: #1a1f3a;
+        --accent: #00d9ff;
+        --accent-2: #7c3aed;
+        --text: #e6e9f5;
+        --text-dim: #9ca3c4;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+        height: 100%;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+        color: var(--text);
+        background: var(--bg-1);
+        overflow: hidden;
+    }
+
+    body {
+        background: radial-gradient(ellipse at top, var(--bg-2) 0%, var(--bg-1) 60%);
+        position: relative;
+    }
+
+    /* Фоновые "звёзды" */
+    body::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background-image:
+            radial-gradient(2px 2px at 20% 30%, rgba(255,255,255,0.4), transparent),
+            radial-gradient(1px 1px at 60% 70%, rgba(255,255,255,0.3), transparent),
+            radial-gradient(2px 2px at 80% 20%, rgba(255,255,255,0.35), transparent),
+            radial-gradient(1px 1px at 30% 80%, rgba(255,255,255,0.25), transparent),
+            radial-gradient(1.5px 1.5px at 90% 90%, rgba(255,255,255,0.3), transparent),
+            radial-gradient(1px 1px at 50% 50%, rgba(255,255,255,0.2), transparent);
+        background-size: 100% 100%;
+        animation: drift 60s linear infinite;
+        opacity: 0.6;
+    }
+
+    @keyframes drift {
+        from { transform: translateY(0); }
+        to   { transform: translateY(-50px); }
+    }
+
+    main {
+        position: relative;
+        z-index: 1;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        padding: 24px;
+        text-align: center;
+    }
+
+    .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 14px;
+        border-radius: 999px;
+        background: rgba(0, 217, 255, 0.1);
+        border: 1px solid rgba(0, 217, 255, 0.3);
+        color: var(--accent);
+        font-size: 12px;
+        letter-spacing: 1.5px;
+        text-transform: uppercase;
+        margin-bottom: 28px;
+    }
+
+    .badge::before {
+        content: '';
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 10px var(--accent);
+        animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
+    }
+
+    h1 {
+        font-size: clamp(2.4rem, 6vw, 4.5rem);
+        font-weight: 800;
+        letter-spacing: -1px;
+        margin-bottom: 18px;
+        background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        color: transparent;
+    }
+
+    .subtitle {
+        font-size: clamp(1rem, 1.6vw, 1.2rem);
+        color: var(--text-dim);
+        max-width: 540px;
+        line-height: 1.6;
+        margin-bottom: 48px;
+    }
+
+    /* Прогресс-бар */
+    .progress-wrap {
+        width: 100%;
+        max-width: 520px;
+        margin-bottom: 22px;
+    }
+
+    .progress-info {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        margin-bottom: 12px;
+        font-size: 14px;
+    }
+
+    .progress-info .label {
+        color: var(--text-dim);
+        letter-spacing: 0.5px;
+    }
+
+    .progress-info .value {
+        font-size: 28px;
+        font-weight: 700;
+        color: var(--accent);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .progress-bar {
+        position: relative;
+        height: 12px;
+        background: rgba(255, 255, 255, 0.06);
+        border-radius: 999px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .progress-fill {
+        position: absolute;
+        inset: 0;
+        width: 85%;
+        background: linear-gradient(90deg, var(--accent) 0%, var(--accent-2) 100%);
+        border-radius: 999px;
+        box-shadow: 0 0 24px rgba(0, 217, 255, 0.5);
+        animation: shine 3s ease-in-out infinite;
+    }
+
+    @keyframes shine {
+        0%, 100% { filter: brightness(1); }
+        50% { filter: brightness(1.3); }
+    }
+
+    .status-text {
+        margin-top: 14px;
+        font-size: 13px;
+        color: var(--text-dim);
+    }
+
+    .status-text strong {
+        color: var(--text);
+    }
+
+    footer {
+        position: absolute;
+        bottom: 24px;
+        left: 0;
+        right: 0;
+        text-align: center;
+        font-size: 12px;
+        color: var(--text-dim);
+        letter-spacing: 0.5px;
+        z-index: 1;
+    }
+
+    footer span { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+    <div class="badge">NexusAI • Статус проекта</div>
+
+    <h1>Сайт в разработке</h1>
+
+    <p class="subtitle">
+        Мы усердно работаем над NexusAI — интеллектуальным чат-ботом нового поколения.
+        Скоро здесь появится полноценный интерфейс для общения с AI.
+    </p>
+
+    <div class="progress-wrap">
+        <div class="progress-info">
+            <span class="label">Статус разработки</span>
+            <span class="value">85%</span>
+        </div>
+        <div class="progress-bar" role="progressbar" aria-valuenow="85" aria-valuemin="0" aria-valuemax="100">
+            <div class="progress-fill"></div>
+        </div>
+        <p class="status-text">
+            <strong>Финальная стадия:</strong> тестирование ядра, оптимизация UX, подготовка к запуску.
+        </p>
+    </div>
+</main>
+
+<footer>
+    © 2026 <span>NexusAI</span> — скоро открытие
+</footer>
+</body>
+</html>

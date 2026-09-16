@@ -1,0 +1,18 @@
+{
+  "tokenizer_type": "BPE",
+  "languages": [
+    "uk",
+    "ru",
+    "en"
+  ],
+  "vocab_size": 16000,
+  "byte_fallback": true,
+  "bos_token": "<bos>",
+  "eos_token": "<eos>",
+  "pad_token": "<pad>",
+  "unk_token": "<unk>",
+  "bos_token_id": 1,
+  "eos_token_id": 2,
+  "pad_token_id": 0,
+  "unk_token_id": 3
+}

@@ -68,9 +68,36 @@ def build_train_val_dataloaders(
     return train_loader, val_loader
 
 
+def build_synthetic_dataloaders(
+    tokenizer: SimpleTokenizer,
+    batch_size: int,
+    max_length: int = 128,
+    train_samples: int = 100000,
+    val_samples: int = 2000,
+    num_workers: int = 0,
+    languages: list[str] | None = None,
+) -> tuple[DataLoader, DataLoader]:
+    """Builds purely procedural synthetic DataLoaders generating billions of tokens on-the-fly (UKR + RUS + ENG)."""
+    from .synthetic import ProceduralDataset
+    langs = languages or ["uk", "ru", "en"]
+    train_ds = ProceduralDataset(tokenizer=tokenizer, total_samples=train_samples, max_length=max_length, seed=42, languages=langs)
+    val_ds = ProceduralDataset(tokenizer=tokenizer, total_samples=val_samples, max_length=max_length, seed=9999, languages=langs)
+    pin_memory = torch.cuda.is_available()
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, collate_fn=_collate, pin_memory=pin_memory, num_workers=num_workers)
+    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, collate_fn=_collate, pin_memory=pin_memory, num_workers=num_workers)
+    return train_loader, val_loader
+
+
 def read_texts(paths: Iterable[str | Path]) -> Iterator[str]:
-    """Read text from txt/md/json/jsonl and parquet files recursively."""
+    """Read text from txt/md/json/jsonl and parquet files recursively, or stream procedurally."""
     for raw_path in paths:
+        if str(raw_path).lower() == "synthetic":
+            from .synthetic import SyntheticDataGenerator
+            gen = SyntheticDataGenerator(seed=42)
+            for _ in range(50000):
+                yield gen.generate_sample()
+            continue
+
         path = Path(raw_path)
         files = [path] if path.is_file() else [p for p in path.rglob("*") if p.is_file()]
         for file_path in files:

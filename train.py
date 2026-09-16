@@ -24,6 +24,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=None, help="Override batch size")
     parser.add_argument("--lr", type=float, default=None, help="Override learning rate")
     parser.add_argument("--val-ratio", type=float, default=0.03, help="Fraction of data for validation")
+    parser.add_argument("--synthetic", action="store_true", help="Use procedural on-the-fly synthetic data generator")
     parser.add_argument("--resume", type=str, default=None, help="Resume training from checkpoint path")
     return parser.parse_args()
 
@@ -56,10 +57,7 @@ def main() -> None:
         config["training"]["resume_from"] = args.resume
 
     ensure_directory("datasets/tokenizer")
-    texts = list(read_texts(args.data))
-    if not texts:
-        print(f"Предупреждение: не найдено текстов в {args.data}. Ищу в datasets/raw...")
-        texts = list(read_texts(["datasets/raw"]))
+    is_synthetic = args.synthetic or any(str(d).lower() == "synthetic" for d in args.data)
 
     tokenizer = SimpleTokenizer()
     tokenizer_path = Path("datasets/tokenizer/vocab.json")
@@ -69,11 +67,22 @@ def main() -> None:
         tokenizer = SimpleTokenizer.load(Path(resume).parent.joinpath("vocab.json"))
     elif tokenizer_path.exists():
         tokenizer = SimpleTokenizer.load(tokenizer_path)
-    elif texts:
-        tokenizer.fit_from_texts(texts)
+    elif is_synthetic:
+        from nexus.synthetic import SyntheticDataGenerator
+        gen = SyntheticDataGenerator(seed=42)
+        sample_texts = gen.generate_batch(1000)
+        tokenizer.fit_from_texts(sample_texts)
         tokenizer.save(tokenizer_path)
     else:
-        tokenizer.save(tokenizer_path)
+        texts = list(read_texts(args.data))
+        if not texts:
+            print(f"Предупреждение: не найдено текстов в {args.data}. Ищу в datasets/raw...")
+            texts = list(read_texts(["datasets/raw"]))
+        if texts:
+            tokenizer.fit_from_texts(texts)
+            tokenizer.save(tokenizer_path)
+        else:
+            tokenizer.save(tokenizer_path)
 
     batch_size = int(config["training"].get("batch_size", 8))
     if torch.cuda.is_available() and torch.cuda.device_count() > 1 and batch_size < torch.cuda.device_count():
@@ -84,14 +93,31 @@ def main() -> None:
         max_length = args.max_length
 
     num_workers = int(config["training"].get("num_workers", 2 if sys.platform != "win32" else 0))
-    train_loader, val_loader = build_train_val_dataloaders(
-        texts=texts,
-        tokenizer=tokenizer,
-        batch_size=batch_size,
-        max_length=max_length,
-        val_ratio=args.val_ratio,
-        num_workers=num_workers,
-    )
+
+    if is_synthetic:
+        from nexus.data_loader import build_synthetic_dataloaders
+        max_steps = int(config["training"].get("max_steps", 200))
+        train_loader, val_loader = build_synthetic_dataloaders(
+            tokenizer=tokenizer,
+            batch_size=batch_size,
+            max_length=max_length,
+            train_samples=max(1000, max_steps * batch_size * 2),
+            val_samples=max(50, batch_size * 4),
+            num_workers=num_workers,
+        )
+    else:
+        texts = list(read_texts(args.data))
+        if not texts:
+            print(f"Предупреждение: не найдено текстов в {args.data}. Ищу в datasets/raw...")
+            texts = list(read_texts(["datasets/raw"]))
+        train_loader, val_loader = build_train_val_dataloaders(
+            texts=texts,
+            tokenizer=tokenizer,
+            batch_size=batch_size,
+            max_length=max_length,
+            val_ratio=args.val_ratio,
+            num_workers=num_workers,
+        )
 
     trainer = Trainer(
         config=config,
