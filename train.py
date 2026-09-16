@@ -18,6 +18,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model-size", type=str, default="100M", help="Default model size preset")
     parser.add_argument("--max-length", type=int, default=128, help="Max sequence length")
     parser.add_argument("--epochs", type=float, default=None, help="Override training epochs")
+    parser.add_argument("--max-steps", type=int, default=None, help="Override maximum training steps")
     parser.add_argument("--batch-size", type=int, default=None, help="Override batch size")
     parser.add_argument("--lr", type=float, default=None, help="Override learning rate")
     parser.add_argument("--val-ratio", type=float, default=0.03, help="Fraction of data for validation")
@@ -41,6 +42,8 @@ def main() -> None:
         config["training"] = {}
     if args.epochs is not None:
         config["training"]["epochs"] = args.epochs
+    if args.max_steps is not None:
+        config["training"]["max_steps"] = args.max_steps
     if args.batch_size is not None:
         config["training"]["batch_size"] = args.batch_size
     if args.lr is not None:
@@ -69,6 +72,9 @@ def main() -> None:
         tokenizer.save(tokenizer_path)
 
     batch_size = int(config["training"].get("batch_size", 8))
+    if torch.cuda.is_available() and torch.cuda.device_count() > 1 and batch_size < torch.cuda.device_count():
+        batch_size = torch.cuda.device_count()
+        config["training"]["batch_size"] = batch_size
     max_length = int(config["training"].get("max_seq_length", config["training"].get("max_length", args.max_length)))
     if args.max_length != 128:
         max_length = args.max_length

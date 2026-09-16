@@ -18,13 +18,13 @@ training:
   optimizer: "adafactor"
   learning_rate: 2e-4
   weight_decay: 0.01
-  max_steps: 12000
-  warmup_steps: 300
+  max_steps: 100
+  warmup_steps: 10
   checkpoint_dir: checkpoints
   logging_dir: logs
   seed: 42
   use_mixed_precision: true
-  precision_dtype: "bfloat16"
+  precision_dtype: "float16"
   save_optimizer_state: false
   checkpoint_every_epochs: 1
   gradient_checkpointing: true

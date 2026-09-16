@@ -118,6 +118,19 @@ class Trainer:
                 print(f"torch.compile пропущен ({e}), используется standard eager mode")
 
         self.optimizer = build_optimizer(self.model, config)
+
+        # Multi-GPU support via DataParallel
+        self.is_multi_gpu = False
+        if self.device.type == "cuda" and torch.cuda.device_count() > 1:
+            num_gpus = torch.cuda.device_count()
+            gpu_names = [torch.cuda.get_device_name(i) for i in range(num_gpus)]
+            print(
+                f"🚀 Обнаружено {num_gpus} GPU ({', '.join(gpu_names)}). "
+                f"Задействуем параллельное обучение torch.nn.DataParallel на всех видеокартах!"
+            )
+            self.model = torch.nn.DataParallel(self.model)
+            self.is_multi_gpu = True
+
         accumulation_steps = max(1, int(train_cfg.get("gradient_accumulation_steps", 1)))
         steps_per_epoch = max(1, len(self.raw_dataloader))
         epochs = float(train_cfg.get("epochs", 0))
@@ -125,7 +138,7 @@ class Trainer:
             total_steps = max(1, math.ceil(epochs * steps_per_epoch))
             config["training"]["max_steps"] = total_steps
         else:
-            total_steps = int(train_cfg.get("max_steps", 1000))
+            total_steps = int(train_cfg.get("max_steps", 200))
 
         scheduler_config = {
             **config,
@@ -145,7 +158,8 @@ class Trainer:
     def load_checkpoint(self, path: Any) -> None:
         checkpoint = torch.load(path, map_location=self.device)
         state_dict = checkpoint.get("model_state", checkpoint)
-        raw_model = getattr(self.model, "_orig_mod", self.model)
+        raw_model = getattr(self.model, "module", self.model)
+        raw_model = getattr(raw_model, "_orig_mod", raw_model)
         raw_model.load_state_dict(state_dict)
         if "optimizer_state" in checkpoint and hasattr(self, "optimizer"):
             self.optimizer.load_state_dict(checkpoint["optimizer_state"])
@@ -198,7 +212,7 @@ class Trainer:
         if epochs_cfg > 0:
             max_steps = max(1, math.ceil(epochs_cfg * steps_per_epoch))
         else:
-            max_steps = int(self.config["training"].get("max_steps", 1000))
+            max_steps = int(self.config["training"].get("max_steps", 200))
 
         total_epochs = math.ceil(max_steps / steps_per_epoch) if epochs_cfg == 0 else int(math.ceil(epochs_cfg))
         checkpoint_every_epochs = max(1, int(self.config["training"].get("checkpoint_every_epochs", 1)))
@@ -336,7 +350,8 @@ class Trainer:
     def _save_checkpoint(self, path: Path | str, epoch: int, step: int, val_loss: float | None = None) -> None:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        raw_model = getattr(self.model, "_orig_mod", self.model)
+        raw_model = getattr(self.model, "module", self.model)
+        raw_model = getattr(raw_model, "_orig_mod", raw_model)
         model_state = {
             k: v.detach().cpu().half() if torch.is_floating_point(v) else v.detach().cpu()
             for k, v in raw_model.state_dict().items()

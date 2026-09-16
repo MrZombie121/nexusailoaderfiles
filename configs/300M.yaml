@@ -18,8 +18,8 @@ training:
   optimizer: "adafactor"
   learning_rate: 4e-4
   weight_decay: 0.01
-  max_steps: 15000
-  warmup_steps: 300
+  max_steps: 250
+  warmup_steps: 20
   checkpoint_dir: checkpoints
   logging_dir: logs
   seed: 42
